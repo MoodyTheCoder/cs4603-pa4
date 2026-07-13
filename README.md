@@ -194,7 +194,7 @@ PA-4/
 ├── DEPLOYMENT_GUIDE.md             # [GIVEN] — step-by-step deployment walkthrough
 ├── GITHUB_PIPELINE.md              # [GIVEN] — CI/CD background for Bonus A
 ├── STUDENT_ANALYSIS.md            # [STUDENT] — your submission write-up
-├── pa4.ipynb                       # [STUDENT] — development & testing notebook
+├── pa4.ipynb                       # [GIVEN skeleton → STUDENT fills in] — development & testing notebook
 │
 ├── data/
 │   ├── annual_report.pdf           # [GIVEN] — the corpus to ingest (Meridian Motor Corp, fictional)
@@ -234,7 +234,7 @@ PA-4/
 │   └── sdk.py                     # [STUDENT] — client SDK
 │
 ├── tests/
-│   └── test_smoke.py             # [STUDENT] — offline graph smoke test (Bonus A target)
+│   └── test_smoke.py             # [STUDENT] — offline graph smoke test (required; automated in Bonus A)
 │
 └── .github/
     └── workflows/
@@ -467,9 +467,11 @@ The synthesizer receives all step results and produces a coherent final answer:
 
 ---
 
-### Task 1.7: Wire the Full Graph [required — up to 5 make-up pts within Part 1's 40]
+### Task 1.7: Wire the Full Graph [required]
 
 **File:** `agent/graph.py`
+
+> **Points note:** this task has no points of its own — Tasks 1.1–1.6 already sum to Part 1's 40. A working end-to-end graph is **required** for Part 1 to be assessed; doing it well can recover up to 5 points lost on earlier Part 1 tasks.
 
 **Reference:** `wk5_langgraph/9.subgraphs.ipynb` for composition patterns
 
@@ -504,6 +506,8 @@ graph = builder.compile()
 4. Test with a combined query (e.g., "What was the revenue in 2023, and what would a 10% increase look like?")
 5. Show the step-by-step execution trace for the combined query
 
+**Required — offline smoke test.** Add `tests/test_smoke.py` that builds the graph and runs one query with a **mocked LLM** (no Databricks calls), asserting the graph compiles and returns a non-empty `messages` result. Run it with `python -m pytest tests/test_smoke.py`. This gives you a fast local feedback loop that never touches serving quota — and it's the same test Bonus A automates in CI.
+
 ---
 
 ## PART 2: Databricks Deployment [40 Points]
@@ -515,6 +519,10 @@ graph = builder.compile()
 > **See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) for complete details** on the manual
 > deployment path — the mental model, the five PA4-specific differences, the serving
 > container internals, secret scopes, and the READY lifecycle.
+>
+> Hitting errors? Jump to the **[Deployment Troubleshooting](#appendix-deployment-troubleshooting)** appendix.
+
+> **Cost & cleanup (student workspaces).** Serving and Vector Search endpoints consume quota. Set `scale_to_zero_enabled=True` (Task 2.3), expect **several minutes** for an endpoint to first reach `READY`, and **delete your endpoint** with `databricks serving-endpoints delete <name>` once you've captured the outputs for your submission.
 
 ---
 
@@ -934,17 +942,38 @@ Bonus C:   agent  ──HTTPS + bearer────▶  MCP server        (separa
 
 ## Grading Rubric
 
-| Component | Points |
-|-----------|--------|
-| Part 1: Document Analyst (LangGraph multi-agent) | 40 |
-| Part 2: Databricks Deployment (MLflow models-from-code) | 40 |
-| Part 3: Python Client SDK | 20 |
-| Bonus A: GitHub Actions CI/CD | 15 |
-| Bonus B: `databricks-agents` SDK | 15 |
-| Bonus C: Standalone MCP server on Databricks | 15 |
-| **Total** | **100 + 45 bonus** |
+Point allocations are in the [Points](#points) table above. Beyond raw functionality:
 
-**Note:** Written analysis responses account for approximately 10% of total points.
+- **Written analysis** accounts for approximately **10%** of total points — answer every question in `STUDENT_ANALYSIS.md`.
+- **Reproducibility:** code that runs but isn't explained, or results a TA can't reproduce from your `STUDENT_ANALYSIS.md`, won't receive full marks.
+- **Deployment proof:** Parts 2–3 require evidence the endpoint actually responded (curl / SDK output), not just code.
+
+---
+
+## Definition of Done
+
+Before you submit, confirm each item — this is the same checklist a TA uses:
+
+**Part 1 — Document Analyst**
+- [ ] `python -m pytest tests/test_smoke.py` passes (offline, mocked LLM)
+- [ ] Combined query shows a full trace: planner → supervisor → RAG → MCP → synthesizer
+- [ ] Final answer is written to the `messages` channel (not only `final_answer`)
+
+**Part 2 — Deployment**
+- [ ] `python -c "import deployment.agent_model"` succeeds with no missing-env error
+- [ ] Endpoint reaches `READY`; `databricks serving-endpoints get <name>` confirms it
+- [ ] `curl` to the endpoint returns HTTP 200 with a **non-empty** completion
+- [ ] Secrets are passed as `{{secrets/...}}` references (no plaintext tokens in code)
+
+**Part 3 — Client SDK**
+- [ ] `health_check()` returns `True` against the live endpoint
+- [ ] `ask()` returns a cited answer; timeout and retry paths are demonstrated
+
+**Submission hygiene**
+- [ ] All ANALYSIS QUESTIONS answered in `STUDENT_ANALYSIS.md`
+- [ ] `pa4.ipynb` included with **all outputs visible**
+- [ ] No `.env`, virtualenvs, or large model files in the zip
+- [ ] Endpoint deleted after capturing outputs (see the cost note in Part 2)
 
 ---
 
@@ -958,6 +987,23 @@ Submit a single zip file containing:
 - Do not include `.env`, virtual environment directories, or large binary/model files
 
 Name your submission: `<roll_number>_pa4.zip`
+
+---
+
+## Appendix: Deployment Troubleshooting
+
+Most Part 2/3 time is lost to a handful of failure modes. Check here first.
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Endpoint status `DEPLOYMENT_FAILED` right after creation | A required env var is missing, so `deployment/agent_model.py` raises at import time | Validate env vars at import (Task 2.1) so serving logs name the missing var; confirm every var from Task 2.3 is set |
+| Endpoint stuck in `NOT_READY` for a long time | First-time container build + model load, or the Vector Search endpoint/index isn't `READY` yet | Wait several minutes; verify the VS index from Task 0.3 is `READY` before serving |
+| Endpoint returns HTTP 200 but an **empty** completion | Synthesizer set `final_answer` but never appended an `AIMessage` to `messages` | Write the answer to the `messages` channel too (Task 1.6) — MLflow reads the last message |
+| `401 Unauthorized` from the container | `DATABRICKS_TOKEN` / `DATABRICKS_HOST` not passed, or a secret-scope reference is wrong | Store them in a secret scope and reference as `{{secrets/scope/key}}` (Task 2.3) |
+| `rag/store.py` raises at container startup | `VECTOR_SEARCH_ENDPOINT` / `VECTOR_SEARCH_INDEX` / `EMBEDDINGS_ENDPOINT` not set on the endpoint | Add them to `environment_vars` (plaintext is fine — not secrets) |
+| Works locally, fails when deployed | You referenced local-only state (a laptop DB, a local file path) | Everything must be reachable from the container: use the managed VS index and env-based config (Task 2.1) |
+
+> **See [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)** for the full mental model behind these.
 
 ---
 
