@@ -6,14 +6,52 @@ TODO: Implement `make_planner(llm)` returning a node that:
   - parses it robustly (fallback to a single step on parse failure),
   - returns {"plan": [...], "current_step_index": 0, "step_results": []}.
 """
-
 from __future__ import annotations
-
-from agent.state import AnalystState
+import json
+from langchain_core.messages import SystemMessage, HumanMessage
+from agent.prompts import PLANNER_PROMPT
 
 
 def make_planner(llm):
-    def planner(state: AnalystState) -> dict:
-        raise NotImplementedError("Task 1.2: implement the planner node")
+    """Return a planner node that decomposes the user query into a list of steps."""
+
+    def planner(state: dict) -> dict:
+        messages = state.get("messages", [])
+
+        # Extract the latest human message
+        user_query = ""
+        for m in reversed(messages):
+            if hasattr(m, "type") and m.type == "human":
+                user_query = m.content
+                break
+        if not user_query:
+            return {"plan": ["Please provide a question."], "current_step_index": 0, "step_results": []}
+
+        # Invoke the LLM with the planning prompt
+        response = llm.invoke([
+            SystemMessage(content=PLANNER_PROMPT),
+            HumanMessage(content=user_query)
+        ])
+
+        # Parse the JSON array, handling markdown fences
+        raw = response.content.strip()
+        if raw.startswith("```json"):
+            raw = raw[7:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+
+        try:
+            plan = json.loads(raw)
+            if not isinstance(plan, list):
+                raise ValueError("Not a list")
+        except Exception:
+            plan = [user_query]   # fallback: single step
+
+        return {
+            "plan": plan,
+            "current_step_index": 0,
+            "step_results": [],
+        }
 
     return planner

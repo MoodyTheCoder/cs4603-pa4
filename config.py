@@ -15,6 +15,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
+DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+DATABRICKS_MODEL = os.getenv("DATABRICKS_MODEL")
+EMBEDDINGS_ENDPOINT = os.getenv("EMBEDDINGS_ENDPOINT")
+
+UC_CATALOG = os.getenv("UC_CATALOG")
+UC_SCHEMA = os.getenv("UC_SCHEMA")
+
+VECTOR_SEARCH_ENDPOINT = os.getenv("VECTOR_SEARCH_ENDPOINT")
+VECTOR_SEARCH_INDEX = os.getenv("VECTOR_SEARCH_INDEX")
+
 
 def _require(name: str) -> str:
     val = os.environ.get(name)

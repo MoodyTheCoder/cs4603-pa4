@@ -10,15 +10,56 @@ Reuse `rag/store.py::get_retriever()` so local and deployed retrieval match.
 
 from __future__ import annotations
 
-from agent.state import AnalystState
+from langchain_core.messages import HumanMessage
+from agent.prompts import RAG_EXTRACT_PROMPT
 
 
 def format_docs(docs) -> str:
-    raise NotImplementedError("Task 1.4: format retrieved docs with citations")
+    """Format retrieved documents into a single string with citations."""
+    parts = []
+    for i, doc in enumerate(docs, 1):
+        src = doc.metadata.get("source", "unknown file")
+        page = doc.metadata.get("page", "N/A")
+        content = doc.page_content.strip()
+        parts.append(f"[{i}] (source: {src}, p.{page})\n{content}")
+    return "\n\n".join(parts)
 
 
 def make_rag_agent(retriever, llm):
-    def rag_agent(state: AnalystState) -> dict:
-        raise NotImplementedError("Task 1.4: implement the RAG node")
+    """Return a RAG agent node that retrieves and extracts a fact for one step."""
+
+    def rag_agent(state: dict) -> dict:
+        plan = state.get("plan", [])
+        idx = state.get("current_step_index", 0)
+
+        # Safety: if index out of range (should not happen), return unchanged
+        if idx >= len(plan):
+            return state
+
+        step = plan[idx]
+
+        # Retrieve relevant chunks from the vector store
+        docs = retriever.invoke(step)
+        if not docs:
+            result_text = "Not found in documents."
+        else:
+            # Format documents with source/page citations
+            formatted = format_docs(docs)
+            # Ask the LLM to extract the exact fact
+            prompt = RAG_EXTRACT_PROMPT.format(question=step, documents=formatted)
+            response = llm.invoke([HumanMessage(content=prompt)])
+            extracted = response.content.strip()
+            # If the LLM indicates it's not found, use a standard message
+            if "not found" in extracted.lower():
+                result_text = "Not found in documents."
+            else:
+                result_text = extracted
+
+        # Append result to step_results and move to next step
+        new_results = state.get("step_results", []) + [result_text]
+        return {
+            "step_results": new_results,
+            "current_step_index": idx + 1,
+        }
 
     return rag_agent
