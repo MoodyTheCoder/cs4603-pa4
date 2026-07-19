@@ -23,23 +23,16 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.serving import EndpointCoreConfigInput, ServedEntityInput
 from dotenv import load_dotenv
 
-load_dotenv()   # load .env variables if present
-
-# ------------------------------------------------------------------
-# Configuration (reads from environment)
-# ------------------------------------------------------------------
+load_dotenv()  
 CATALOG = os.environ.get("UC_CATALOG", "main")
 SCHEMA = os.environ.get("UC_SCHEMA", "default")
-MODEL_NAME = "document_analyst"                       # Unity Catalog model name
+MODEL_NAME = "document_analyst"                       
 FULL_MODEL_NAME = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
-ENDPOINT_NAME = "pa4-doc-analyst-endpoint"            # serving endpoint name
+ENDPOINT_NAME = "pa4-doc-analyst-endpoint"            
 
-# ------------------------------------------------------------------
-# 1. Log and register the model in Unity Catalog
-# ------------------------------------------------------------------
 def log_and_register():
     """Log the model to MLflow (Databricks tracking) and register in Unity Catalog."""
-    # Use Databricks tracking, not local
+
     mlflow.set_tracking_uri("databricks")
     mlflow.set_registry_uri("databricks-uc")
     mlflow.set_experiment("/Shared/pa4_document_analyst")
@@ -83,14 +76,10 @@ def log_and_register():
         return FULL_MODEL_NAME, registered.version
 
 
-# ------------------------------------------------------------------
-# 2. Create or update the serving endpoint
-# ------------------------------------------------------------------
 def create_or_update_endpoint(uc_name: str, version: str) -> str:
     """Create or update a Databricks Model Serving endpoint."""
     w = WorkspaceClient()
 
-    # Environment variables for the serving container
     environment_vars = {
         "DATABRICKS_HOST": "{{secrets/cs4603-deploy/DATABRICKS_HOST}}",
         "DATABRICKS_TOKEN": "{{secrets/cs4603-deploy/DATABRICKS_TOKEN}}",
@@ -108,10 +97,8 @@ def create_or_update_endpoint(uc_name: str, version: str) -> str:
         environment_vars=environment_vars,
     )
 
-    # Check if endpoint already exists
     try:
         w.serving_endpoints.get(name=ENDPOINT_NAME)
-        # Update existing endpoint
         w.serving_endpoints.update_config(
             name=ENDPOINT_NAME,
             served_entities=[served_entity],
@@ -119,7 +106,6 @@ def create_or_update_endpoint(uc_name: str, version: str) -> str:
         print(f"🔄 Updated endpoint '{ENDPOINT_NAME}' to version {version}")
     except Exception as e:
         if "does not exist" in str(e).lower() or "not found" in str(e).lower():
-            # Create new endpoint
             config = EndpointCoreConfigInput(
                 name=ENDPOINT_NAME,
                 served_entities=[served_entity],
@@ -129,7 +115,6 @@ def create_or_update_endpoint(uc_name: str, version: str) -> str:
         else:
             raise
 
-    # Wait for the endpoint to be READY
     print("⏳ Waiting for endpoint to become READY (this can take 10–20 minutes)...")
     while True:
         ep = w.serving_endpoints.get(name=ENDPOINT_NAME)
@@ -146,9 +131,6 @@ def create_or_update_endpoint(uc_name: str, version: str) -> str:
     return url
 
 
-# ------------------------------------------------------------------
-# Main
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     name, ver = log_and_register()
     url = create_or_update_endpoint(name, ver)

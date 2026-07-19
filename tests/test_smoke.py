@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import sys
 
-# Ensure the project root is in the path (harmless safety net)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
@@ -26,13 +25,12 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 def test_graph_module_imports():
     """Minimal collection guard: the graph module must import cleanly."""
-    from agent.graph import build_graph  # noqa: F401
+    from agent.graph import build_graph  
 
 
 def test_graph_compiles_and_returns_messages():
     """Build the graph with mocked LLM, retriever, and MCP tools, then invoke."""
-    # 1. Fake LLM – the order of calls is:
-    #    planner, supervisor (×3), synthesizer
+    
     fake_llm = MagicMock()
     fake_llm.invoke.side_effect = [
         AIMessage(content='["Retrieve: revenue", "Compute: 10% increase"]'),  # planner
@@ -42,22 +40,18 @@ def test_graph_compiles_and_returns_messages():
         AIMessage(content="Final answer."), # synthesizer
     ]
 
-    # 2. Fake retriever – returns a dummy document with metadata
     fake_retriever = MagicMock()
     fake_doc = MagicMock()
     fake_doc.page_content = "Revenue: 16.91 trillion"
     fake_doc.metadata = {"source": "test.pdf", "page": "1"}
     fake_retriever.invoke.return_value = [fake_doc]
 
-    # 3. Mock MCP tool loading to avoid starting a real subprocess
     with patch("agent.graph.load_mcp_tools", return_value=[]):
         from agent.graph import build_graph
         graph = build_graph(llm=fake_llm, retriever=fake_retriever, tools=[])
 
-    # 4. Invoke the graph
     result = graph.invoke({"messages": [HumanMessage(content="test query")]})
 
-    # 5. Assertions
     assert "messages" in result
     assert len(result["messages"]) > 0, "Messages should contain at least the final answer"
     last_msg = result["messages"][-1]

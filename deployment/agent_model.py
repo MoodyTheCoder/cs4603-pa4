@@ -15,12 +15,8 @@ import sys
 import mlflow
 from dotenv import load_dotenv
 
-# Load .env in case it's present (local testing)
 load_dotenv()
 
-# ----------------------------------------------------------------------
-# 1. Validate required environment variables
-# ----------------------------------------------------------------------
 REQUIRED_ENV_VARS = [
     "DATABRICKS_HOST",
     "DATABRICKS_TOKEN",
@@ -37,9 +33,6 @@ if missing:
         "Set them in the serving endpoint environment_vars as secret references."
     )
 
-# ----------------------------------------------------------------------
-# 2. Import graph components
-# ----------------------------------------------------------------------
 try:
     from agent.graph import build_graph, load_mcp_tools
     from config import get_chat_llm
@@ -49,13 +42,9 @@ except ImportError as e:
         "Failed to import agent modules. Ensure code_paths includes 'agent', 'rag', 'tools', 'config.py'."
     ) from e
 
-# ----------------------------------------------------------------------
-# 3. Build the production graph
-# ----------------------------------------------------------------------
 llm = get_chat_llm(temperature=0.0)
 retriever = get_retriever(k=4)
 
-# graph.py resolves the MCP server path relative to itself, so no argument needed
 tools = load_mcp_tools()
 
 graph = build_graph(
@@ -64,10 +53,6 @@ graph = build_graph(
     tools=tools,
 )
 
-# ----------------------------------------------------------------------
-# 4. Set the model for MLflow
-# ----------------------------------------------------------------------
 mlflow.models.set_model(graph)
 
-# Optional confirmation (remove for silent production use)
 print("✅ agent_model: graph loaded and set for MLflow.")

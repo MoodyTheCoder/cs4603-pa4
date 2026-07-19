@@ -18,7 +18,7 @@ load_dotenv()
 
 CATALOG = os.environ["UC_CATALOG"]
 SCHEMA = os.environ["UC_SCHEMA"]
-MODEL_NAME = "document_analyst_agent_bonusb"   # a separate name to avoid conflict
+MODEL_NAME = "document_analyst_agent_bonusb"  
 FULL_MODEL_NAME = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
 
 
@@ -26,16 +26,12 @@ class GraphWrapper(PythonModel):
     """Wraps the LangGraph agent to return only the final answer string."""
 
     def predict(self, context: PythonModelContext, model_input: pd.DataFrame) -> str:
-        # model_input is expected to have a column 'messages' with a list of dicts
         from agent.graph import build_graph
         from langchain_core.messages import HumanMessage
 
-        # Rebuild graph inside the container
         graph = build_graph()
 
-        # Get the first row's messages
         messages = model_input.iloc[0]["messages"]
-        # Convert to HumanMessage if they are plain dicts
         if isinstance(messages, list) and len(messages) > 0:
             first_msg = messages[0]
             if isinstance(first_msg, dict):
@@ -56,7 +52,6 @@ def main() -> None:
     mlflow.set_experiment("/Shared/pa4_document_analyst")
 
     with mlflow.start_run(run_name="bonus-b-deploy"):
-        # Log the wrapper model (not the raw LangGraph) to get a simple string output
         model_info = mlflow.pyfunc.log_model(
             artifact_path="agent",
             python_model=GraphWrapper(),
@@ -88,8 +83,8 @@ def main() -> None:
             model_version=registered.version,
             scale_to_zero=True,
         )
-        print(f"🎉 Endpoint: {deployment.endpoint_name}")
-        print(f"📝 Review App: {deployment.review_app_url}")
+        print(f" Endpoint: {deployment.endpoint_name}")
+        print(f" Review App: {deployment.review_app_url}")
 
 
 if __name__ == "__main__":

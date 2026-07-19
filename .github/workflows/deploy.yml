@@ -13,7 +13,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
+  workflow_dispatch:   # manual trigger
 
 jobs:
   lint-and-test:
@@ -35,7 +35,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO: install deps and run `python deployment/deploy.py` with secrets
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -52,4 +51,4 @@ jobs:
           DATABRICKS_MODEL: databricks-meta-llama-3-3-70b-instruct
         run: uv run python deployment/deploy.py
       - name: Print confirmation
-        run: echo "Deployment triggered successfully."
+        run: echo "🎉 Deployment triggered successfully."

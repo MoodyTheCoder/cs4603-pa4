@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Full Document Analyst graph (Tasks 1.5 + 1.7).
 
 TODO:
@@ -10,17 +11,14 @@ TODO:
     planner -> supervisor -> {rag_agent | mcp_tools} -> ... -> synthesizer.
     Inject dependencies so the graph can be unit-tested offline with fakes.
 """
-
-import inspect
 import asyncio
+import inspect
 import os
 import sys
 import threading
-from typing import List, Optional
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
 from langgraph.graph import END, START, StateGraph
 
 from agent.planner import make_planner
@@ -28,15 +26,11 @@ from agent.rag_agent import make_rag_agent
 from agent.state import AnalystState
 from agent.supervisor import MCP, RAG, SYNTH, make_supervisor, route_from_supervisor
 from agent.synthesizer import make_synthesizer
-
 from config import get_chat_llm
 from rag.store import get_retriever
 
-# ----------------------------------------------------------------------
-# Background event loop for MCP tools (safe for serving containers)
-# ----------------------------------------------------------------------
-_mcp_loop: Optional[asyncio.AbstractEventLoop] = None
-_mcp_client: Optional[MultiServerMCPClient] = None
+_mcp_loop: asyncio.AbstractEventLoop | None = None
+_mcp_client: MultiServerMCPClient | None = None
 
 def _run_loop_forever(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)
@@ -68,7 +62,6 @@ def _wrap_sync(tool: BaseTool) -> BaseTool:
 
     def sync_func(**kwargs):
         result = _run_coro(coroutine(**kwargs))
-        # Handle different result shapes (MCP might return a tuple or an object with content)
         if isinstance(result, tuple) and len(result) >= 1 and isinstance(result[0], str):
             return result[0]
         if hasattr(result, "content") and isinstance(result.content, list):
@@ -85,7 +78,7 @@ def _wrap_sync(tool: BaseTool) -> BaseTool:
         coroutine=coroutine,
     )
 
-def load_mcp_tools(server_path: str | None = None) -> List[BaseTool]:
+def load_mcp_tools(server_path: str | None = None) -> list[BaseTool]:
     """Connect to the MCP server (stdio) and return sync‑wrapped tools."""
     global _mcp_client
     if server_path is None:
@@ -103,16 +96,12 @@ def load_mcp_tools(server_path: str | None = None) -> List[BaseTool]:
 
     _mcp_client = MultiServerMCPClient(connections)
 
-    # get_tools() might be a coroutine (local) or a synchronous list (container)
     raw_tools = _mcp_client.get_tools()
     if inspect.iscoroutine(raw_tools):
-        # Run it on the background event loop (already set up)
         raw_tools = _run_coro(raw_tools)
 
     return [_wrap_sync(t) for t in raw_tools]
-# ----------------------------------------------------------------------
-# Graph assembly
-# ----------------------------------------------------------------------
+
 def build_graph(llm=None, retriever=None, tools=None):
     """Assemble the complete Document Analyst graph."""
     if llm is None:
@@ -122,14 +111,12 @@ def build_graph(llm=None, retriever=None, tools=None):
     if tools is None:
         tools = load_mcp_tools()
 
-    # Build node factories
     planner_node = make_planner(llm)
     supervisor_node = make_supervisor(llm)
     rag_node = make_rag_agent(retriever, llm)
     mcp_node = make_mcp_node(tools, llm)
     synthesizer_node = make_synthesizer(llm)
 
-    # Wire the graph
     builder = StateGraph(AnalystState)
     builder.add_node("planner", planner_node)
     builder.add_node("supervisor", supervisor_node)
@@ -153,7 +140,6 @@ def shutdown_mcp_tools() -> None:
     """Optional: stop the MCP client gracefully."""
     global _mcp_client
     if _mcp_client is not None:
-        # The client might have a close() method; ignore for now
         _mcp_client = None
 
 def make_mcp_node(tools, llm):
@@ -161,9 +147,9 @@ def make_mcp_node(tools, llm):
     llm_with_tools = llm.bind_tools(tools)
 
     MCP_SYSTEM_PROMPT = """\
-You are a calculation assistant with access to precise math tools.
-For the given step, choose exactly one tool and call it with the correct arguments.\
-"""
+        You are a calculation assistant with access to precise math tools.
+        For the given step, choose exactly one tool and call it with the correct arguments.\
+        """
 
     def mcp_tools(state: dict) -> dict:
         plan = state.get("plan", [])
@@ -183,7 +169,7 @@ For the given step, choose exactly one tool and call it with the correct argumen
             tool_call = response.tool_calls[0]
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            # Find the tool
+        
             tool_obj = next((t for t in tools if t.name == tool_name), None)
             if tool_obj is None:
                 result = f"Tool '{tool_name}' not found."
@@ -201,8 +187,4 @@ For the given step, choose exactly one tool and call it with the correct argumen
 
     return mcp_tools
 
-
-# ----------------------------------------------------------------------
-# Default graph instance (used locally and by deployment/agent_model.py)
-# ----------------------------------------------------------------------
 default_graph = build_graph()

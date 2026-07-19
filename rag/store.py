@@ -39,7 +39,7 @@ class DatabricksRetriever(BaseRetriever):
         data_array = results.get("result", {}).get("data_array", [])
         docs = []
         for row in data_array:
-            # row is a list of values in the same order as self.columns
+            
             text = row[0] if len(row) > 0 else ""
             metadata = {}
             for i, col in enumerate(self.columns[1:], start=1):
@@ -57,7 +57,7 @@ def get_retriever(k: int = 4) -> BaseRetriever:
     vs_endpoint = settings["vs_endpoint"]
     vs_index = settings["vs_index"]
 
-    client = VectorSearchClient()  # reads DATABRICKS_HOST/TOKEN from env
+    client = VectorSearchClient()  
     index = client.get_index(endpoint_name=vs_endpoint, index_name=vs_index)
 
     return DatabricksRetriever(

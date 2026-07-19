@@ -9,13 +9,12 @@ TODO: Implement `DocumentAnalystClient` and `AnalystClientError` per Task 3.1:
   - exponential backoff on 429/503, TimeoutError with elapsed time, and wrap HTTP
     errors in AnalystClientError(status_code, message, request_id).
 """
-
 from __future__ import annotations
 
+import json
 import os
 import time
-import json
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 import requests
 
@@ -30,7 +29,6 @@ class AnalystClientError(Exception):
 
 class DocumentAnalystClient:
     """Reusable client for the Document Analyst serving endpoint."""
-
     def __init__(
         self,
         endpoint_name: str,
@@ -46,9 +44,6 @@ class DocumentAnalystClient:
         self.max_retries = max_retries
         self.base_url = f"{self.host}/serving-endpoints/{self.endpoint_name}"
 
-    # ------------------------------------------------------------------
-    # Health check
-    # ------------------------------------------------------------------
     def health_check(self) -> bool:
         """Return True if the endpoint is in READY state."""
         try:
@@ -57,33 +52,24 @@ class DocumentAnalystClient:
             w = WorkspaceClient()
             ep = w.serving_endpoints.get(self.endpoint_name)
             ready = ep.state.ready
-            # Handle both enum and plain string
             if hasattr(ready, "value"):
                 ready = ready.value
             return ready == "READY"
         except Exception:
             return False
 
-    # ------------------------------------------------------------------
-    # ask() – return final answer string
-    # ------------------------------------------------------------------
     def ask(self, question: str) -> str:
         """Send a question and return the synthesised answer."""
         payload = {"messages": [{"role": "user", "content": question}]}
         resp = self._request_with_retry(payload)
         data = resp.json()
-        # v1 langchain endpoint returns a list of state dictionaries
         if isinstance(data, list) and len(data) > 0:
             state = data[0]
             messages = state.get("messages", [])
             if messages:
                 return messages[-1].get("content", "")
-        # Fallback for unexpected formats
         return str(data)
 
-    # ------------------------------------------------------------------
-    # ask_streaming() – yield chunks (or whole answer once)
-    # ------------------------------------------------------------------
     def ask_streaming(self, question: str) -> Iterator[str]:
         """
         Yield text chunks from the endpoint.
@@ -95,7 +81,6 @@ class DocumentAnalystClient:
         content_type = resp.headers.get("content-type", "")
 
         if "text/event-stream" in content_type:
-            # Parse SSE – not guaranteed for models‑from‑code, but handle it
             for line in resp.iter_lines(decode_unicode=True):
                 if line and line.startswith("data:"):
                     data_str = line[5:].strip()
@@ -110,7 +95,6 @@ class DocumentAnalystClient:
                     except json.JSONDecodeError:
                         pass
         else:
-            # Non‑SSE – read entire response and yield the answer once
             answer = ""
             data = resp.json()
             if isinstance(data, list) and len(data) > 0:
@@ -119,9 +103,6 @@ class DocumentAnalystClient:
                     answer = msgs[-1].get("content", "")
             yield answer
 
-    # ------------------------------------------------------------------
-    # Internal helper: request with retry & exponential backoff
-    # ------------------------------------------------------------------
     def _request_with_retry(self, payload: dict, stream: bool = False):
         """Send POST to /invocations with retry and exponential backoff."""
         url = f"{self.base_url}/invocations"
@@ -157,13 +138,13 @@ class DocumentAnalystClient:
                     raise TimeoutError(
                         f"Request timed out after {self.timeout}s "
                         f"and {attempt + 1} attempts."
-                    )
+                    ) from exc
             except requests.HTTPError as exc:
                 raise AnalystClientError(
                     message=exc.response.text,
                     status_code=exc.response.status_code,
                     request_id=exc.response.headers.get("x-request-id"),
-                )
-        # Should never reach here; raise the last timeout if it happened
+                ) from exc
+
         if last_exc:
             raise TimeoutError("Request timed out after all retries.") from last_exc

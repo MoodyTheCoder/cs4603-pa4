@@ -9,7 +9,8 @@ serving contract — see spec Task 1.6).
 
 from __future__ import annotations
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
+
 from agent.prompts import SYNTHESIZER_PROMPT
 
 
@@ -36,7 +37,7 @@ def make_synthesizer(llm):
 
         return {
             "final_answer": answer,
-            "messages": [AIMessage(content=answer)],   # critical for deployment
+            "messages": [AIMessage(content=answer)],   
         }
 
     return synthesizer
