@@ -2814,6 +2814,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "databricks-agents", specifier = ">=1.11.0" },
@@ -2837,6 +2842,9 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
 ]
 provides-extras = ["dev", "agents"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.15.22" }]
 
 [[package]]
 name = "packaging"
