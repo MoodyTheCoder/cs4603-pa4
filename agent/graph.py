@@ -11,7 +11,7 @@ TODO:
     Inject dependencies so the graph can be unit-tested offline with fakes.
 """
 
-
+import inspect
 import asyncio
 import os
 import sys
@@ -36,7 +36,7 @@ from rag.store import get_retriever
 # Background event loop for MCP tools (safe for serving containers)
 # ----------------------------------------------------------------------
 _mcp_loop: Optional[asyncio.AbstractEventLoop] = None
-
+_mcp_client: Optional[MultiServerMCPClient] = None
 
 def _run_loop_forever(loop: asyncio.AbstractEventLoop) -> None:
     asyncio.set_event_loop(loop)
@@ -85,7 +85,6 @@ def _wrap_sync(tool: BaseTool) -> BaseTool:
         coroutine=coroutine,
     )
 
-
 def load_mcp_tools(server_path: str | None = None) -> List[BaseTool]:
     """Connect to the MCP server (stdio) and return sync‑wrapped tools."""
     global _mcp_client
@@ -102,15 +101,15 @@ def load_mcp_tools(server_path: str | None = None) -> List[BaseTool]:
         }
     }
 
-    async def _load_tools():
-        client = MultiServerMCPClient(connections)
-        tools = await client.get_tools()
-        return client, tools
+    _mcp_client = MultiServerMCPClient(connections)
 
-    client, raw_tools = _run_coro(_load_tools())
-    _mcp_client = client            # keep alive so the subprocess stays open
+    # get_tools() might be a coroutine (local) or a synchronous list (container)
+    raw_tools = _mcp_client.get_tools()
+    if inspect.iscoroutine(raw_tools):
+        # Run it on the background event loop (already set up)
+        raw_tools = _run_coro(raw_tools)
+
     return [_wrap_sync(t) for t in raw_tools]
-
 # ----------------------------------------------------------------------
 # Graph assembly
 # ----------------------------------------------------------------------
