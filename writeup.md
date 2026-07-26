@@ -1,0 +1,4 @@
+### Part 1 – Governed Tools
+
+**Why does declaring `DatabricksFunction(...)` as a resource remove the need for a token in your deployment code?**  
+When you include a `DatabricksFunction` resource in the `mlflow.langchain.log_model(..., resources=[...])` call, the Databricks platform automatically grants the serving endpoint’s internal identity the `EXECUTE` privilege on the specified functions. At deployment time, short‑lived credentials are provisioned and injected into the endpoint container, so the model code can call the UC functions without a manually‑passed secret token. This is a declarative, governed authorization model – you describe what resources the endpoint needs, and the platform handles access.
