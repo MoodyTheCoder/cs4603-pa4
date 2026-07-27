@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """Full Document Analyst graph with Unity Catalog governed tools (Extra‑Credit Part 1)."""
 
 from typing import Optional
@@ -66,6 +67,7 @@ def build_graph(llm=None, retriever=None, tools=None):
     builder.add_edge(SYNTH, END)
 
     return builder.compile()
+
 
 
 def make_mcp_node(tools, llm):
